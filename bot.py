@@ -30,6 +30,8 @@ CAMERA_URL = "http://192.168.1.64/ISAPI/Streaming/channels/101/picture"
 CAMERA_USER = os.getenv("CAM_USR")
 CAMERA_PASS = os.getenv("CAM_PWD")
 
+LAST_SNAPSHOT = Path("/mnt/usbflash/snapshot.jpg")
+
 PHOTO_RATE_LIMIT_SECONDS = 5
 LAST_PHOTO_TIME = {}
 
@@ -317,7 +319,18 @@ async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception("Ошибка получения фото с камеры")
         await update.message.reply_text(f"❌ Could not get photo: {e}")
         
-        
+async def reply_with_optional_snapshot(update: Update, text: str):
+    if LAST_SNAPSHOT.exists():
+        try:
+            with open(LAST_SNAPSHOT, "rb") as f:
+                await update.message.reply_photo(photo=f, caption=text)
+            return
+        except Exception as e:
+            logger.exception("Ошибка отправки snapshot")
+            await update.message.reply_text(f"{text}\n\n⚠️ Snapshot error: {e}")
+            return
+
+    await update.message.reply_text(text)        
 
 async def lastactivity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     date_str, time_str, err = get_last_motion_activity(MOTION_CSV_FILE)
@@ -326,11 +339,13 @@ async def lastactivity(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ {err}")
         return
 
-    await update.message.reply_text(
-        f"last motion detected in:\n"
+    text = (
+        f"Last motion detected:\n"
         f"📅 {date_str}\n"
         f"🕒 {time_str}"
-    )        
+    )
+
+    await reply_with_optional_snapshot(update, text)     
 
 ################################################################################################################################
 ################################################################################################################################
@@ -363,7 +378,7 @@ def main():
     app.add_handler(CommandHandler("subscribe", subscribe))
     app.add_handler(CommandHandler("unsubscribe", unsubscribe))
     app.add_handler(CommandHandler("subscribers", subscribers_count))
-    print("✅ bot started. send the /last . /status ./lastactivity")
+    print("✅ bot started. send /help")
     app.run_polling()
 
 if __name__ == "__main__":
