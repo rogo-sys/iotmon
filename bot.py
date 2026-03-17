@@ -253,37 +253,41 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def get_last_motion_activity(filename):
     """
-    Возвращает (date, time) из последней непустой строки CSV.
+    Возвращает (date, time) из последней строки CSV,
+    где 4-е поле равно 1.
+
     Ожидаемый формат строки:
     date, time, unix_ts, status
-    или с табами (если csv записан через \t)
     """
     try:
         if not os.path.exists(filename):
             return None, None, f"Файл не найден: {filename}"
 
-        last_line = None
+        last_match = None
+
         with open(filename, "r", encoding="utf-8", newline="") as f:
             for line in f:
                 line = line.strip()
-                if line:
-                    last_line = line
+                if not line:
+                    continue
 
-        if not last_line:
-            return None, None, "Файл пустой."
+                # Поддержка tab-separated и comma-separated
+                if "\t" in line:
+                    parts = [p.strip() for p in line.split("\t")]
+                else:
+                    parts = next(csv.reader([line]))
 
-        # Поддержка и tab-separated, и comma-separated
-        if "\t" in last_line:
-            parts = [p.strip() for p in last_line.split("\t")]
-        else:
-            # fallback через csv.reader для обычного CSV
-            parts = next(csv.reader([last_line]))
+                if len(parts) < 4:
+                    continue
 
-        if len(parts) < 2:
-            return None, None, f"Неверный формат строки: {last_line}"
+                if parts[3].strip() == "1":
+                    last_match = parts
 
-        date_str = parts[0]
-        time_str = parts[1]
+        if not last_match:
+            return None, None, "Строка, где 4-е поле = 1, не найдена."
+
+        date_str = last_match[0].strip()
+        time_str = last_match[1].strip()
         return date_str, time_str, None
 
     except Exception as e:
@@ -352,14 +356,14 @@ async def lastactivity(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
         "🤖 Available commands:\n"
-        "/status – show temperature, load, memory, network, and uptime\n"
         "/sensors – show the latest sensors data\n"
-        "/activity – show the time of the last activity from the cam\n"
         "/photo – take snapshot from camera\n"
-        "/subscribe – subscribe this chat to motion alerts\n"
-        "/unsubscribe – unsubscribe this chat from motion alerts\n"
-        "/subscribers – show subscribers count\n"
+        "/activity – show the time of the last activity from the cam\n"
+        "/status – show temperature, load, memory, network, and uptime\n"
+        "/sub – subscribe this chat to motion alerts\n"
+        "/unsub – unsubscribe this chat from motion alerts\n"
         "/help – show this message\n"
+        "/subscribers – show subscribers count\n"
     )
     await update.message.reply_text(msg)
 
@@ -371,12 +375,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("sensors", last))
-    app.add_handler(CommandHandler("status", status))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("activity", lastactivity))
     app.add_handler(CommandHandler("photo", photo))
-    app.add_handler(CommandHandler("subscribe", subscribe))
-    app.add_handler(CommandHandler("unsubscribe", unsubscribe))
+    app.add_handler(CommandHandler("activity", lastactivity))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("status", status))
+    app.add_handler(CommandHandler("sub", subscribe))
+    app.add_handler(CommandHandler("unsub", unsubscribe))
     app.add_handler(CommandHandler("subscribers", subscribers_count))
     print("✅ bot started. send /help")
     app.run_polling()
